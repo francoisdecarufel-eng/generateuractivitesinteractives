@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Générateur de Prompts Mathématiques (PFEQ)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #818cf8; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-gray-800">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- ICONS ---
+        const Icons = {
+            Zap: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>,
+            ChevronRight: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>,
+            ChevronLeft: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>,
+            Check: ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>,
+            Copy: ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>,
+            Download: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>,
+            RefreshCw: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>,
+            Calculator: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01"></path><path d="M12 10h.01"></path><path d="M8 10h.01"></path><path d="M12 14h.01"></path><path d="M8 14h.01"></path><path d="M12 18h.01"></path><path d="M8 18h.01"></path></svg>,
+            FileText: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>,
+            PlusSquare: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+        };
+
+        // --- DATA THEMES ---
+        const THEMES = {
+            "🚀 ESPACE & SCIENCE-FICTION": ["Espace intergalactique", "Station spatiale", "Planète inconnue", "Mars", "Lune", "Système solaire", "Voyage dans une fusée", "Exploration d’astéroïdes", "Base scientifique lunaire", "Colonisation spatiale", "Aliens amicaux", "Vaisseau perdu", "Trou noir", "Observatoire astronomique", "Laboratoire du futur", "Robots et IA", "Ville futuriste", "Temps et dimensions parallèles", "Univers quantique"],
+            "🎃 SAISONS & FÊTES": ["Halloween 🎃", "Manoir hanté", "Cimetière mystérieux", "Château de Dracula", "Sorcières et potions", "Forêt sombre", "Ville fantôme", "Noël 🎄", "Village du Père Noël", "Atelier des lutins", "Traîneau magique", "Forêt enneigée", "Fabrique de jouets", "Pôle Nord", "Carnaval", "Saint-Valentin", "Pâques", "Fête foraine", "Anniversaire surprise", "Nouvel An", "Fête des récoltes"],
+            "🌿 NATURE & ENVIRONNEMENT": ["Forêt enchantée", "Jungle", "Savane africaine", "Océan", "Fonds marins", "Récifs coralliens", "Montagnes", "Désert", "Banquise", "Volcan", "Île tropicale", "Rivière", "Cascade", "Parc naturel", "Réserve écologique", "Jardin botanique"],
+            "🐾 ANIMAUX & MONDE VIVANT": ["Zoo", "Ferme", "Aquarium", "Refuge animalier", "Safari", "Parc ornithologique", "Centre de réhabilitation", "Forêt peuplée d’animaux parlants", "Monde miniature des insectes", "Monde des dinosaures", "Jurassique", "Pré-histoire", "Monde marin géant"],
+            "🏫 VIE QUOTIDIENNE": ["École", "Salle de classe magique", "Bibliothèque", "Cour d’école", "Cafétéria", "Quartier urbain", "Maison", "Supermarché", "Centre commercial", "Gare", "Aéroport", "Hôpital", "Caserne de pompiers", "Poste de police", "Musée", "Théâtre", "Cinéma"],
+            "🎢 LOISIRS & AVENTURE": ["Parc d’attractions", "Montagnes russes", "Fête foraine", "Escape room", "Parc aquatique", "Camping", "Randonnée", "Chasse au trésor", "Course automobile", "Rallye", "Course de drones", "Jeux Olympiques", "Stade sportif", "Coupe du monde", "Compétition inter-écoles"],
+            "🏛️ HISTOIRE & CIVILISATIONS": ["Égypte antique", "Rome antique", "Grèce antique", "Vikings", "Moyen Âge", "Chevaliers et châteaux", "Pirates", "Îles au trésor", "Mayas et Aztèques", "Chine impériale", "Japon féodal", "Révolution industrielle", "Temps des dinosaures", "Voyage dans le temps"],
+            "🧙‍♂️ FANTASY & IMAGINAIRE": ["Royaume magique", "Château enchanté", "Dragons", "Elfes et nains", "Sorciers", "Académie de magie", "Monde des fées", "Portails magiques", "Livre vivant", "Bibliothèque interdite", "Ville flottante", "Îles célestes"]
+        };
+
+        // --- DATA PFEQ PROGRESSION UNIFIÉE ---
+        const PFEQ_PROGRESSION = {
+            "Arithmétique (Nombres)": [
+                "Compter ou réciter la comptine des nombres par ordre croissant (1er cycle)",
+                "Compter ou réciter la comptine par ordre décroissant (1er cycle)",
+                "Compter par bonds (1er et 2e cycles)",
+                "Dénombrer des collections réelles ou dessinées (1er cycle)",
+                "Lire et écrire tout nombre naturel (1er, 2e et 3e cycles)",
+                "Représenter des nombres naturels : accent mis sur le groupement (1er cycle)",
+                "Représenter des nombres naturels : accent mis sur l’échange (base 10) (1er et 2e cycles)",
+                "Représenter des nombres naturels : accent mis sur la valeur de position (1er et 2e cycles)",
+                "Représenter la puissance d’un nombre naturel (3e cycle)",
+                "Composer et décomposer un nombre naturel (1er et 2e cycles)",
+                "Reconnaître des expressions équivalentes (ex: 52 = 40 + 12) (1er cycle)",
+                "Comparer entre eux des nombres naturels (1er, 2e et 3e cycles)",
+                "Ordonner des nombres naturels (1er, 2e et 3e cycles)",
+                "Décrire des régularités numériques (ex: pairs/impairs, divisibilité) (1er, 2e et 3e cycles)",
+                "Situer des nombres naturels sur un axe (droite numérique) (1er, 2e et 3e cycles)",
+                "Identifier les propriétés des nombres naturels (pair, impair, premier, composé) (1er, 2e et 3e cycles)",
+                "Classifier des nombres naturels de diverses façons (2e cycle)",
+                "Faire une approximation d’une collection (estimer) (1er, 2e et 3e cycles)"
+            ],
+            "Arithmétique (Fractions)": [
+                "Reconnaître des fractions provenant de la vie courante (2e cycle)",
+                "Représenter une fraction de différentes façons (partie d'un tout/collection) (2e et 3e cycles)",
+                "Associer une fraction à une partie d’un tout ou d'une collection (2e cycle)",
+                "Reconnaître les différents sens de la fraction (partage, division, rapport) (2e et 3e cycles)",
+                "Distinguer le rôle du numérateur et du dénominateur (2e et 3e cycles)",
+                "Lire et écrire une fraction (2e et 3e cycles)",
+                "Comparer une fraction à 0, à 1/2 ou à 1 (2e cycle)",
+                "Vérifier l’équivalence de deux fractions (2e et 3e cycles)",
+                "Associer un nombre décimal ou un pourcentage à une fraction (3e cycle)",
+                "Ordonner des fractions (dénominateurs identiques ou multiples) (2e et 3e cycles)",
+                "Situer des fractions sur un axe (2e et 3e cycles)",
+                "Reconnaître des fractions irréductibles (3e cycle)"
+            ],
+            "Arithmétique (Décimaux & Entiers)": [
+                "Représenter des nombres décimaux (matériel concret ou dessins) (2e et 3e cycles)",
+                "Reconnaître des représentations équivalentes de nombres décimaux (2e et 3e cycles)",
+                "Lire et écrire des nombres écrits en notation décimale (2e et 3e cycles)",
+                "Reconnaître le rôle de la virgule et la valeur de position (2e et 3e cycles)",
+                "Composer et décomposer un nombre décimal (2e et 3e cycles)",
+                "Reconnaître des expressions numériques équivalentes (2e et 3e cycles)",
+                "Situer des nombres décimaux sur un axe (2e et 3e cycles)",
+                "Comparer entre eux des nombres décimaux (2e et 3e cycles)",
+                "Faire une approximation (arrondir, tronquer) (3e cycle)",
+                "Ordonner des nombres décimaux (2e et 3e cycles)",
+                "Associer une fraction ou un pourcentage à un nombre décimal (2e et 3e cycles)",
+                "Représenter des nombres entiers (3e cycle)",
+                "Lire et écrire des nombres entiers (3e cycle)",
+                "Situer des nombres entiers sur un axe (3e cycle)",
+                "Comparer et ordonner des nombres entiers (3e cycle)"
+            ],
+            "Arithmétique (Opérations)": [
+                "Reconnaître l’opération (addition, soustraction, mult., div.) à effectuer (1er, 2e et 3e cycles)",
+                "Traduire une situation d'addition ou de soustraction (ajout, retrait, réunion, comparaison) (1er cycle)",
+                "Traduire une situation par une composition de transformations (ex: j'ai gagné 2, puis perdu 3) (2e et 3e cycles)",
+                "Traduire une situation de multiplication ou division (disposition rectangulaire, partage) (2e et 3e cycles)",
+                "Établir la relation d’égalité entre des expressions numériques (1er, 2e et 3e cycles)",
+                "Déterminer des équivalences numériques (commutativité, associativité) (1er, 2e et 3e cycles)",
+                "Déterminer des équivalences (distributivité) (3e cycle)",
+                "Traduire une situation par une suite d’opérations (chaînes d'opérations) (2e et 3e cycles)",
+                "Tables d'addition (0+0 à 10+10) et soustractions correspondantes (1er cycle)",
+                "Tables de multiplication (0x0 à 10x10) et divisions correspondantes (2e et 3e cycles)",
+                "Calcul écrit : Addition et soustraction de nombres naturels (1er et 2e cycles)",
+                "Calcul écrit : Multiplication et division de nombres naturels (2e et 3e cycles)",
+                "Calcul écrit : Addition et soustraction de nombres décimaux (2e et 3e cycles)",
+                "Calcul écrit : Multiplication et division de nombres décimaux (3e cycle)"
+            ],
+            "Géométrie": [
+                "Se repérer et repérer des objets dans l’espace (relations spatiales) (1er cycle)",
+                "Effectuer des activités de repérage sur un plan, une carte ou une grille (1er et 2e cycles)",
+                "Se repérer dans le plan cartésien (1er quadrant) (2e cycle)",
+                "Se repérer dans le plan cartésien (4 quadrants) (3e cycle)",
+                "Comparer des objets de l'environnement à des solides (1er cycle)",
+                "Identifier des solides (boule, cube, cylindre, cône, prisme, pyramide) (1er cycle)",
+                "Décrire des solides (faces, sommets, arêtes) (2e cycle)",
+                "Comparer et construire des solides (1er et 2e cycles)",
+                "Identifier le développement de solides (prisme et pyramide) (2e et 3e cycles)",
+                "Associer un solide à son développement (et vice-versa) (2e et 3e cycles)",
+                "Tester la relation d'Euler (3e cycle)",
+                "Identifier des figures planes (carré, rectangle, triangle, cercle, losange) (1er cycle)",
+                "Décrire des figures planes (côtés, sommets, angles) (2e cycle)",
+                "Classifier les polygones (convexes, non convexes) (2e cycle)",
+                "Classifier les quadrilatères (trapèze, parallélogramme, rectangle, losange, carré) (2e et 3e cycles)",
+                "Classifier les triangles (scalène, isocèle, équilatéral, rectangle) (3e cycle)",
+                "Décrire le cercle (rayon, diamètre, circonférence, angle au centre) (3e cycle)",
+                "Identifier des régularités dans une frise ou un dallage (1er cycle)",
+                "Poursuivre une frise ou un dallage (1er cycle)",
+                "Produire des frises et des dallages (réflexion) (2e cycle)",
+                "Produire des frises et des dallages (translation, rotation) (3e cycle)"
+            ],
+            "Mesure": [
+                "Estimer et mesurer avec des unités non conventionnelles (1er cycle)",
+                "Estimer et mesurer avec des unités conventionnelles (m, dm, cm, mm, km) (1er, 2e et 3e cycles)",
+                "Établir des relations entre les unités de mesure de longueur (2e et 3e cycles)",
+                "Calculer le périmètre de figures planes (2e et 3e cycles)",
+                "Estimer et mesurer la surface avec des unités non conventionnelles (2e cycle)",
+                "Estimer et mesurer la surface avec des unités conventionnelles (m², dm², cm²) (2e et 3e cycles)",
+                "Calculer l’aire de rectangles, carrés, triangles (3e cycle)",
+                "Estimer et mesurer le volume avec des unités non conventionnelles (2e cycle)",
+                "Estimer et mesurer le volume avec des unités conventionnelles (m³, dm³, cm³) (3e cycle)",
+                "Calculer le volume de prismes droits (3e cycle)",
+                "Comparer des angles (droit, aigu, obtus) (2e cycle)",
+                "Estimer et mesurer des angles en degrés (3e cycle)",
+                "Estimer et mesurer la capacité (L, mL) (2e et 3e cycles)",
+                "Estimer et mesurer la masse (kg, g) (2e et 3e cycles)",
+                "Établir des relations entre les unités de mesure (2e et 3e cycles)",
+                "Estimer et mesurer le temps (unités conventionnelles) (1er, 2e et 3e cycles)",
+                "Établir des relations entre les unités de temps (2e et 3e cycles)",
+                "Estimer et mesurer la température (°C) (1er, 2e et 3e cycles)"
+            ],
+            "Statistique & Probabilité": [
+                "Formuler des questions d’enquête (1er, 2e et 3e cycles)",
+                "Collecter, décrire et organiser des données (1er, 2e et 3e cycles)",
+                "Interpréter des données à l'aide d'un tableau, pictogramme ou diagramme à bandes (1er et 2e cycles)",
+                "Interpréter des données à l'aide d'un diagramme à ligne brisée (2e et 3e cycles)",
+                "Interpréter des données à l'aide d'un diagramme circulaire (3e cycle)",
+                "Calculer et interpréter la moyenne arithmétique (3e cycle)",
+                "Expérimenter des activités liées au hasard (prédictions qualitatives) (1er cycle)",
+                "Dénombrer les résultats possibles d’une expérience aléatoire (2e et 3e cycles)",
+                "Calculer la probabilité d’un événement (prédictions quantitatives) (3e cycle)",
+                "Comparer des résultats théoriques et expérimentaux (3e cycle)"
+            ]
+        };
+
+        function MathPromptGenerator() {
+            const [step, setStep] = useState(0);
+            const [copied, setCopied] = useState(false);
+            const outputRef = useRef(null);
+            
+            const [answers, setAnswers] = useState({
+                projectType: '', 
+                level: '', 
+                content: '',
+                concepts: [],
+                activityType: [],
+                questionCount: '',
+                difficulty: '',
+                feedbackExtras: [],
+                style: '',
+                theme: '',
+                interfaceStyle: '',
+                techFormat: ''
+            });
+
+            const LAST_QUESTION_STEP = 11; 
+            const RESULT_STEP = 12;
+
+            const steps = [
+                { id: 1, title: "Type" },
+                { id: 2, title: "Niveau" },
+                { id: 3, title: answers.projectType === 'doc' ? "Document" : "Concepts" },
+                { id: 4, title: "Activité" },
+                { id: 5, title: "Quantité" },
+                { id: 6, title: "Difficulté" },
+                { id: 7, title: "Feedback" },
+                { id: 8, title: "Style" },
+                { id: 9, title: "Thème" },
+                { id: 10, title: "Interface" },
+                { id: 11, title: "Technique" }
+            ];
+
+            const handleSingleSelect = (key, value) => {
+                setAnswers({ ...answers, [key]: value });
+            };
+
+            const handleMultiSelect = (key, value) => {
+                const list = answers[key];
+                if (list.includes(value)) {
+                    setAnswers({ ...answers, [key]: list.filter(item => item !== value) });
+                } else {
+                    setAnswers({ ...answers, [key]: [...list, value] });
+                }
+            };
+
+            const nextStep = () => {
+                if (step < RESULT_STEP) {
+                    setStep(step + 1);
+                }
+            };
+
+            const prevStep = () => {
+                if (step > 0) setStep(step - 1);
+            };
+
+            const generatePrompt = () => {
+                const isDoc = answers.projectType === 'doc';
+                const feedbackExtras = answers.feedbackExtras.length ? `, ${answers.feedbackExtras.join(', ')}` : "";
+                const activityTypeStr = answers.activityType.length > 0 ? answers.activityType.join(', ') : "Au choix";
+
+                let conceptsSection = "";
+                if (isDoc) {
+                    conceptsSection = "CONCEPTS MATHÉMATIQUES: \n   ⚠️ META-CONSIGNE IMPORTANTE: Les concepts et notions mathématiques doivent être STRICTEMENT IDENTIQUES à ceux présents dans le document source fourni ci-dessous. N'introduis aucune notion du PFEQ qui ne figure pas déjà dans le texte source.";
+                } else {
+                    conceptsSection = `CONCEPTS PFEQ CIBLÉS (Niveau: ${answers.level}):\n${answers.concepts.map(c => `   - ${c}`).join('\n')}`;
+                }
+
+                let contentSection = "";
+                if (isDoc) {
+                    contentSection = `4. CONTENU SOURCE (DOCUMENT): 
+   ---------------------------------------------------
+   ${answers.content}
+   ---------------------------------------------------
+   Utilise UNIQUEMENT ce contenu pour générer les questions.`;
+                } else {
+                    contentSection = `4. SOURCE: Création originale basée strictement sur les concepts PFEQ sélectionnés.`;
+                }
+
+                return `RÔLE: Tu es un expert en pédagogie mathématique (Primaire Québec PFEQ), développeur web d'élite et designer UX/UI spécialisé en gamification.
+
+OBJECTIF: Créer une activité mathématique interactive autonome d'une qualité visuelle et pédagogique exceptionnelle.
+
+1. TYPE DE PROJET: ${isDoc ? "Adaptation numérique d'un document existant" : "Nouvelle création (Basée sur le PFEQ)"}
+2. PUBLIC CIBLE: ${answers.level}
+3. ${conceptsSection}
+
+${contentSection}
+
+5. TYPE D'ACTIVITÉ: ${activityTypeStr}
+6. VOLUME: ${answers.questionCount} questions.
+7. DIFFICULTÉ: ${answers.difficulty}
+8. SYSTÈME DE RÉTROACTION (OBLIGATOIRE):
+   - Validation immédiate (Vert/Rouge)
+   - Bouton Recommencer
+   - Score final et Résumé
+   - Indices et Explications
+   ${feedbackExtras ? `- AJOUTS: ${feedbackExtras}` : ""}
+9. STYLE PÉDAGOGIQUE: ${answers.style}
+10. THÈME / UNIVERS: ${answers.theme ? answers.theme : "Au choix de l'IA (Créatif)"}
+11. INTERFACE: ${answers.interfaceStyle}
+12. TECHNIQUE: ${answers.techFormat}
+
+CONTRAINTES DE QUALITÉ VISUELLE ET D'EXPÉRIENCE UTILISATEUR (MÉTA-CONSIGNE IMPÉRATIVE) :
+- L'activité générée doit être VISUELLEMENT IMPECCABLE, structurée et digne d'une application professionnelle (type Netmath ou jeu vidéo éducatif).
+- Le design doit être soigné, aéré et fluide : alignements parfaits, palette de couleurs harmonieuse, typographie lisible et hiérarchisée.
+- Les éléments visuels ne doivent JAMAIS être difformes, flous ou mal proportionnés. Tout doit être net et esthétique.
+- L'expérience utilisateur (UX) doit être fluide et intuitive : scénario bien ficelé, transitions douces, feedbacks visuels gratifiants.
+- L'élève doit se sentir immergé dans un environnement cohérent et logique (Thème: ${answers.theme || "Libre"}), sans friction technique ou visuelle.
+
+CONTRAINTES VISUELLES (MÉTA-CONSIGNE IMPÉRATIVE) :
+- Si la question nécessite un support visuel pour être comprise (géométrie, fractions, dénombrement, statistiques), tu DOIS impérativement générer ces éléments visuels.
+- Utilise des images générées via SVG, Canvas ou CSS shapes pour représenter : polygones, solides, diagrammes, ensembles d'objets, tartes/bandes de fractions, droites numériques, etc.
+- Toutes les représentations nécessaires à la compréhension des questions doivent être présentes visuellement (pas seulement décrites textuellement).
+
+CONTRAINTES DE MÉCANIQUE INTERACTIVE (MÉTA-CONSIGNE IMPÉRATIVE) :
+Tu dois IMPÉRATIVEMENT respecter le ou les types d'activités sélectionnés ci-dessus (Point 5).
+- Si "Glisser-déposer" est choisi : Le code DOIT inclure une mécanique de drag & drop fonctionnelle (HTML5 Drag and Drop API ou événements souris/touch).
+- Si "Associer des éléments" est choisi : L'activité DOIT demander de relier des éléments (lignes tracées ou paires identifiées).
+- Si "Défi chronométré" est choisi : Un minuteur (Timer) DOIT être visible et fonctionnel, arrêtant l'activité ou donnant un bonus.
+- Si "Parcours gamifié" est choisi : L'activité doit présenter une progression visuelle (carte, niveaux, barre d'XP).
+- Si "QCM interactif" est choisi : Des boutons radio ou boutons cliquables classiques.
+- Si "Réponse courte" est choisi : Des champs input text/number avec validation stricte.
+Le non-respect de la mécanique choisie rend l'activité invalide.
+
+CONTRAINTES DE ROBUSTESSE ET DE PROFESSIONNALISME (MÉTA-CONSIGNE IMPÉRATIVE) :
+- Le code doit être EXEMPT DE BUGS. Tu dois vérifier mentalement chaque fonction logique.
+- Aucune anomalie visuelle ou comportementale n'est tolérée (superposition d'éléments, boutons qui ne réagissent pas, scores qui ne s'incrémentent pas).
+- La logique mathématique doit être INFAILLIBLE (pas d'erreurs de calcul ou de validation de réponse incorrecte).
+- Prévois la gestion des erreurs : que se passe-t-il si l'élève clique deux fois ? S'il ne remplit pas le champ ? Le jeu ne doit jamais "crasher".
+- Le résultat final doit être testable immédiatement et fonctionner parfaitement du premier coup, comme un produit fini professionnel.
+
+INSTRUCTIONS TECHNIQUES:
+- Génère UN SEUL fichier HTML complet (HTML/CSS/JS).
+- Le code produit sera utilisé dans une page HTML (ou Google Sites).
+- Code robuste, sans erreur, responsive.
+- Pas de 'alert()', utilise des messages dans le DOM.
+- Assure une parfaite cohérence didactique.
+
+Génère maintenant le code.`;
+            };
+
+            const copyToClipboard = () => {
+                if (outputRef.current) {
+                    outputRef.current.select();
+                    outputRef.current.setSelectionRange(0, 99999); 
+                    
+                    let success = false;
+                    try {
+                        success = document.execCommand("copy");
+                    } catch (err) {
+                        console.error("Erreur copie", err);
+                    }
+
+                    if (success) {
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                    } else {
+                        alert("Le navigateur a bloqué la copie. Le texte est sélectionné, faites Ctrl+C.");
+                    }
+                }
+            };
+
+            const downloadPrompt = () => {
+                const text = generatePrompt();
+                const element = document.createElement("a");
+                const file = new Blob([text], {type: 'text/plain'});
+                element.href = URL.createObjectURL(file);
+                element.download = "prompt_activite_math.txt";
+                document.body.appendChild(element);
+                element.click();
+                document.body.removeChild(element);
+            };
+
+            const isStepValid = () => {
+                if (step === 0) return true;
+                if (step === 1 && answers.projectType) return true;
+                if (step === 2 && answers.level) return true;
+                if (step === 3) {
+                    if (answers.projectType === 'doc') return answers.content.trim().length > 0;
+                    return answers.concepts.length > 0;
+                }
+                if (step === 4 && answers.activityType.length > 0) return true;
+                if (step === 5 && answers.questionCount) return true;
+                if (step === 6 && answers.difficulty) return true;
+                if (step === 7) return true; 
+                if (step === 8 && answers.style) return true;
+                if (step === 9 && answers.theme) return true; 
+                if (step === 10 && answers.interfaceStyle) return true;
+                if (step === 11 && answers.techFormat) return true;
+                return false;
+            };
+
+            const renderStepContent = () => {
+                switch (step) {
+                    case 0:
+                        return (
+                            <div className="text-center py-6 animate-fadeIn">
+                                <div className="bg-indigo-100 p-4 rounded-full w-20 h-20 mx-auto flex items-center justify-center mb-6">
+                                    <div className="text-indigo-600"><Icons.Zap /></div>
+                                </div>
+                                <h2 className="text-2xl font-bold text-gray-800 mb-4">Générateur d'Activités Maths</h2>
+                                <p className="text-gray-600 mb-8 max-w-lg mx-auto">
+                                    Outil conforme à la <strong>Progression des Apprentissages (PDA)</strong> du Québec.
+                                </p>
+                                <button onClick={() => setStep(1)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-lg font-medium transition flex items-center mx-auto gap-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                                    Commencer <div className="w-5 h-5"><Icons.ChevronRight /></div>
+                                </button>
+                            </div>
+                        );
+                    case 1: 
+                        return (
+                            <div className="space-y-4 animate-fadeIn">
+                                <h3 className="text-xl font-semibold mb-4 text-indigo-900">1. Que souhaitez-vous faire ?</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <button onClick={() => handleSingleSelect('projectType', 'new')} className={`p-6 rounded-xl border-2 text-left transition relative overflow-hidden group ${answers.projectType === 'new' ? 'border-indigo-500 bg-indigo-50 text-indigo-800' : 'border-gray-200 hover:border-indigo-200 hover:bg-gray-50'}`}>
+                                        <div className="flex items-center gap-3 mb-2 font-bold text-lg"><Icons.PlusSquare /> Nouvelle Activité (PFEQ)</div>
+                                        <p className="text-sm opacity-80">Je choisis des notions précises de la PDA par cycle.</p>
+                                    </button>
+                                    <button onClick={() => handleSingleSelect('projectType', 'doc')} className={`p-6 rounded-xl border-2 text-left transition relative overflow-hidden group ${answers.projectType === 'doc' ? 'border-indigo-500 bg-indigo-50 text-indigo-800' : 'border-gray-200 hover:border-indigo-200 hover:bg-gray-50'}`}>
+                                        <div className="flex items-center gap-3 mb-2 font-bold text-lg"><Icons.FileText /> Depuis un Document</div>
+                                        <p className="text-sm opacity-80">Je fournis un texte et l'IA respecte 100% du contenu.</p>
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    case 2: 
+                        return (
+                             <div className="space-y-4 animate-fadeIn">
+                                <h3 className="text-xl font-semibold mb-4 text-indigo-900">2. Niveau Scolaire (Primaire)</h3>
+                                <p className="text-sm text-gray-500 mb-4">La liste des concepts s'adaptera au cycle choisi.</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {['1er Cycle (1re - 2e année)', '2e Cycle (3e - 4e année)', '3e Cycle (5e - 6e année)', 'Adaptation scolaire', 'Enrichissement'].map((opt) => (
+                                        <button key={opt} onClick={() => handleSingleSelect('level', opt)} className={`p-4 rounded-lg border text-left transition ${answers.level === opt ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:bg-gray-50'}`}>{opt}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    case 3: 
+                        if (answers.projectType === 'doc') {
+                            return (
+                                <div className="space-y-4 animate-fadeIn">
+                                    <h3 className="text-xl font-semibold mb-2 text-indigo-900">3. Contenu du Document</h3>
+                                    <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-4 text-amber-800 text-sm">
+                                        <strong>Meta-consigne active :</strong> L'activité n'utilisera QUE les concepts du texte ci-dessous.
+                                    </div>
+                                    <textarea className="w-full p-4 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none h-64 font-mono text-sm" placeholder="Collez votre exercice ici..." value={answers.content} onChange={(e) => setAnswers({...answers, content: e.target.value})}></textarea>
+                                </div>
+                            );
+                        } else {
+                            return (
+                                <div className="space-y-4 animate-fadeIn">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h3 className="text-xl font-semibold text-indigo-900">3. Tous les Concepts PFEQ</h3>
+                                        <span className="text-xs font-mono bg-indigo-100 text-indigo-800 px-2 py-1 rounded">Basé sur la PDA</span>
+                                    </div>
+                                    <div className="h-96 overflow-y-auto pr-2 space-y-6 custom-scrollbar">
+                                        {Object.entries(PFEQ_PROGRESSION).map(([category, items]) => (
+                                            <div key={category} className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                                                <h4 className="font-bold text-indigo-800 mb-3 border-b pb-2 flex items-center gap-2">
+                                                    {category.includes("Arithmétique") && <span className="text-blue-500">🔢</span>}
+                                                    {category.includes("Géométrie") && <span className="text-green-500">📐</span>}
+                                                    {category.includes("Mesure") && <span className="text-orange-500">📏</span>}
+                                                    {category.includes("Statistique") && <span className="text-purple-500">📊</span>}
+                                                    {category}
+                                                </h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    {items.map((item) => (
+                                                        <button 
+                                                            key={item} 
+                                                            onClick={() => handleMultiSelect('concepts', item)} 
+                                                            className={`p-2 text-sm rounded border text-left transition flex justify-between items-start hover:bg-gray-50 ${answers.concepts.includes(item) ? 'bg-indigo-50 border-indigo-400 text-indigo-900 ring-1 ring-indigo-400' : 'border-gray-100 text-gray-600'}`}
+                                                        >
+                                                            <span>{item}</span>
+                                                            {answers.concepts.includes(item) && <div className="mt-1"><Icons.Check className="w-4 h-4 text-indigo-600" /></div>}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        }
+                    case 4: 
+                        return (
+                             <div className="space-y-4 animate-fadeIn">
+                                <h3 className="text-xl font-semibold mb-2 text-indigo-900">4. Type d'activité</h3>
+                                <p className="text-sm text-gray-500 mb-4">Sélection multiple possible.</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {['QCM interactif', 'Réponse courte (numérique)', 'Glisser-déposer', 'Associer des éléments', 'Vrai/Faux', 'Défi chronométré', 'Parcours gamifié', 'Résolution de problème'].map((opt) => (
+                                        <button key={opt} onClick={() => handleMultiSelect('activityType', opt)} className={`p-4 rounded-lg border text-left transition flex justify-between items-center ${answers.activityType.includes(opt) ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                            {opt} {answers.activityType.includes(opt) && <div className="w-4 h-4"><Icons.Check className="w-4 h-4" /></div>}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    case 5:
+                         return (
+                            <div className="space-y-4 animate-fadeIn">
+                                <h3 className="text-xl font-semibold mb-2 text-indigo-900">5. Nombre de questions</h3>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {['10 questions', '15 questions', '20 questions', '25 questions', 'Progressif'].map((opt) => (
+                                        <button key={opt} onClick={() => handleSingleSelect('questionCount', opt)} className={`p-4 rounded-lg border text-center transition ${answers.questionCount === opt ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:bg-gray-50'}`}>{opt}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    case 6:
+                        return (
+                            <div className="space-y-4 animate-fadeIn">
+                                <h3 className="text-xl font-semibold mb-2 text-indigo-900">6. Difficulté</h3>
+                                <div className="grid grid-cols-1 gap-3">
+                                    {['Facile (Révision)', 'Modéré (Pratique)', 'Difficile (Défi)', 'Progressif', 'Adaptatif'].map((opt) => (
+                                        <button key={opt} onClick={() => handleSingleSelect('difficulty', opt)} className={`p-4 rounded-lg border text-left transition ${answers.difficulty === opt ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:bg-gray-50'}`}>{opt}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    case 7:
+                        return (
+                            <div className="space-y-4 animate-fadeIn">
+                                <h3 className="text-xl font-semibold mb-2 text-indigo-900">7. Rétroaction</h3>
+                                <div className="bg-gray-100 p-3 rounded-lg text-sm text-gray-700 border-l-4 border-gray-400">
+                                    <strong>Inclus :</strong> Vert/Rouge, Recommencer, Indices, Score.
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {['Barre de progression', 'Sons', 'Confettis', 'Explication détaillée'].map((opt) => (
+                                        <button key={opt} onClick={() => handleMultiSelect('feedbackExtras', opt)} className={`p-3 text-sm rounded-lg border text-left transition flex justify-between items-center ${answers.feedbackExtras.includes(opt) ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:bg-gray-50'}`}>{opt} {answers.feedbackExtras.includes(opt) && <div className="w-4 h-4"><Icons.Check className="w-4 h-4" /></div>}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    case 8:
+                        return (
+                            <div className="space-y-4 animate-fadeIn">
+                                <h3 className="text-xl font-semibold mb-2 text-indigo-900">8. Style</h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {['Ludique', 'Formel', 'Narratif', 'Compétitif', 'Autonomie', 'Inclusif'].map((opt) => (
+                                        <button key={opt} onClick={() => handleSingleSelect('style', opt)} className={`p-4 rounded-lg border text-center transition ${answers.style === opt ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:bg-gray-50'}`}>{opt}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    case 9: // --- NEW STEP: THEMES ---
+                        return (
+                            <div className="space-y-4 animate-fadeIn">
+                                <h3 className="text-xl font-semibold mb-2 text-indigo-900">9. Univers & Thème</h3>
+                                <p className="text-sm text-gray-500 mb-4">Choisissez un univers pour rendre l'activité immersive.</p>
+                                <div className="h-96 overflow-y-auto pr-2 space-y-6 custom-scrollbar">
+                                    {Object.entries(THEMES).map(([category, items]) => (
+                                        <div key={category} className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                                            <h4 className="font-bold text-indigo-800 mb-3 border-b pb-2">{category}</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                {items.map((item) => (
+                                                    <button 
+                                                        key={item} 
+                                                        onClick={() => handleSingleSelect('theme', item)} 
+                                                        className={`p-2 text-sm rounded border text-left transition flex justify-between items-start hover:bg-gray-50 ${answers.theme === item ? 'bg-indigo-50 border-indigo-400 text-indigo-900 ring-1 ring-indigo-400' : 'border-gray-100 text-gray-600'}`}
+                                                    >
+                                                        <span>{item}</span>
+                                                        {answers.theme === item && <div className="mt-1"><Icons.Check className="w-4 h-4 text-indigo-600" /></div>}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    case 10:
+                        return (
+                            <div className="space-y-4 animate-fadeIn">
+                                <h3 className="text-xl font-semibold mb-2 text-indigo-900">10. Interface</h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {['Épurée', 'Colorée', 'Tablette', 'Accessible', 'Jeu Vidéo'].map((opt) => (
+                                        <button key={opt} onClick={() => handleSingleSelect('interfaceStyle', opt)} className={`p-4 rounded-lg border text-center transition ${answers.interfaceStyle === opt ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:bg-gray-50'}`}>{opt}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    case 11:
+                        return (
+                            <div className="space-y-4 animate-fadeIn">
+                                <h3 className="text-xl font-semibold mb-2 text-indigo-900">11. Technique</h3>
+                                <div className="grid grid-cols-1 gap-3">
+                                    {['Page Web Interactive (Fichier HTML)', 'Google Sites (Embed)', 'Code commenté'].map((opt) => (
+                                        <button key={opt} onClick={() => handleSingleSelect('techFormat', opt)} className={`p-4 rounded-lg border text-left transition ${answers.techFormat === opt ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:bg-gray-50'}`}>{opt}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    case 12:
+                        return (
+                            <div className="space-y-6 animate-fadeIn">
+                                <div className="text-center">
+                                    <div className="bg-green-100 p-3 rounded-full w-16 h-16 mx-auto flex items-center justify-center mb-4 text-green-600"><Icons.Check className="w-8 h-8" /></div>
+                                    <h2 className="text-2xl font-bold text-gray-800">Prompt Généré</h2>
+                                    <p className="text-gray-600 mb-4">Voici la commande à copier et à donner à l'IA.</p>
+                                </div>
+                                <div className="relative mb-4">
+                                    <textarea 
+                                        ref={outputRef}
+                                        id="prompt-output"
+                                        className="w-full p-4 h-80 border-2 border-indigo-200 rounded-xl font-mono text-xs bg-gray-50 text-gray-800 focus:border-indigo-500 outline-none" 
+                                        value={generatePrompt()} 
+                                        readOnly
+                                    ></textarea>
+                                </div>
+                                <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+                                    <button onClick={copyToClipboard} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 font-bold transition transform hover:scale-105 active:scale-95 cursor-pointer">
+                                        {copied ? <span className="flex items-center gap-2"><Icons.Check className="w-5 h-5"/> Copié !</span> : <span className="flex items-center gap-2"><Icons.Copy className="w-5 h-5 text-white"/> COPIER LE TEXTE</span>}
+                                    </button>
+                                    <button onClick={downloadPrompt} className="bg-white border-2 border-gray-300 hover:bg-gray-50 text-gray-700 px-6 py-3 rounded-lg shadow flex items-center justify-center gap-2 font-medium transition cursor-pointer">
+                                        <Icons.Download className="w-5 h-5"/> Télécharger (.txt)
+                                    </button>
+                                </div>
+                                <div className="flex justify-center mt-6">
+                                    <button onClick={() => setStep(0)} className="text-indigo-600 hover:underline flex items-center gap-2 text-sm font-medium">
+                                        <div className="w-4 h-4"><Icons.RefreshCw /></div> Créer une autre activité
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    default: return null;
+                }
+            };
+
+            return (
+                <div className="max-w-2xl mx-auto my-8 bg-white rounded-xl shadow-xl overflow-hidden border border-gray-100 font-sans">
+                    <div className="bg-indigo-700 p-4 text-white flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                            <div className="w-6 h-6"><Icons.Calculator /></div>
+                            <h1 className="text-lg font-bold">Assistant PFEQ</h1>
+                        </div>
+                        {/* Barre de progression : on ne l'affiche pas à l'écran de résultat (étape 12) */}
+                        {step > 0 && step < RESULT_STEP && (
+                            <div className="text-xs font-medium bg-indigo-800 px-3 py-1 rounded-full border border-indigo-600">Étape {step}/{LAST_QUESTION_STEP}</div>
+                        )}
+                    </div>
+                    {/* Barre de progression visuelle */}
+                    {step > 0 && step < RESULT_STEP && (
+                        <div className="w-full bg-gray-200 h-1.5">
+                            <div className="bg-indigo-500 h-1.5 transition-all duration-300 ease-out" style={{ width: `${(step / LAST_QUESTION_STEP) * 100}%` }}></div>
+                        </div>
+                    )}
+                    <div className="p-6 md:p-8">
+                        {renderStepContent()}
+                        
+                        {/* Boutons de navigation (Retour / Suivant) - cachés sur l'écran final */}
+                        {step > 0 && step < RESULT_STEP && (
+                            <div className="flex justify-between mt-8 pt-6 border-t border-gray-100">
+                                <button onClick={prevStep} className="px-5 py-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition flex items-center gap-2 text-sm font-medium">
+                                    <div className="w-4 h-4"><Icons.ChevronLeft /></div> Retour
+                                </button>
+                                <button 
+                                    onClick={nextStep} 
+                                    disabled={!isStepValid()} 
+                                    className={`px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition shadow-sm text-sm ${isStepValid() ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer transform hover:-translate-y-0.5' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                                >
+                                    {step === LAST_QUESTION_STEP ? 'Générer le Prompt' : 'Suivant'} 
+                                    {step !== LAST_QUESTION_STEP && <div className="w-4 h-4"><Icons.ChevronRight /></div>}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<MathPromptGenerator />);
+    </script>
+</body>
+</html>
