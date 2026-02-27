@@ -185,6 +185,7 @@
             const [step, setStep] = useState(0);
             const [copied, setCopied] = useState(false);
             const outputRef = useRef(null);
+            const [promptLengthWarning, setPromptLengthWarning] = useState(false);
             
             const [answers, setAnswers] = useState({
                 projectType: '', 
@@ -203,20 +204,6 @@
 
             const LAST_QUESTION_STEP = 11; 
             const RESULT_STEP = 12;
-
-            const steps = [
-                { id: 1, title: "Type" },
-                { id: 2, title: "Niveau" },
-                { id: 3, title: answers.projectType === 'doc' ? "Document" : "Concepts" },
-                { id: 4, title: "Activité" },
-                { id: 5, title: "Quantité" },
-                { id: 6, title: "Difficulté" },
-                { id: 7, title: "Feedback" },
-                { id: 8, title: "Style" },
-                { id: 9, title: "Thème" },
-                { id: 10, title: "Interface" },
-                { id: 11, title: "Technique" }
-            ];
 
             const handleSingleSelect = (key, value) => {
                 setAnswers({ ...answers, [key]: value });
@@ -241,91 +228,70 @@
                 if (step > 0) setStep(step - 1);
             };
 
+            // OPTIMIZED PROMPT GENERATION (Max 4000 chars strictly enforced)
             const generatePrompt = () => {
                 const isDoc = answers.projectType === 'doc';
-                const feedbackExtras = answers.feedbackExtras.length ? `, ${answers.feedbackExtras.join(', ')}` : "";
-                const activityTypeStr = answers.activityType.length > 0 ? answers.activityType.join(', ') : "Au choix";
+                const fbx = answers.feedbackExtras.length ? `, ${answers.feedbackExtras.join(', ')}` : "";
+                const actStr = answers.activityType.length > 0 ? answers.activityType.join(', ') : "Au choix";
 
-                let conceptsSection = "";
+                let concepts = "";
+                let source = "";
+                
+                // Static part is around ~1200 chars. We leave ~2800 chars for dynamic content.
                 if (isDoc) {
-                    conceptsSection = "CONCEPTS MATHÉMATIQUES: \n   ⚠️ META-CONSIGNE IMPORTANTE: Les concepts et notions mathématiques doivent être STRICTEMENT IDENTIQUES à ceux présents dans le document source fourni ci-dessous. N'introduis aucune notion du PFEQ qui ne figure pas déjà dans le texte source.";
+                    concepts = "3. CONCEPTS: Strictement identiques au texte. N'invente aucune notion PFEQ hors texte.";
+                    const MAX_CONTENT = 2500; // Hard cap for document length to avoid >4000 total
+                    const safeContent = answers.content.length > MAX_CONTENT ? 
+                                        answers.content.substring(0, MAX_CONTENT) + "\n...[TRONQUÉ POUR RESPECTER LA LIMITE DE CARACTÈRES]" : 
+                                        answers.content;
+                    source = `[DOC SOURCE]\n${safeContent}\n[FIN DOC]`;
                 } else {
-                    conceptsSection = `CONCEPTS PFEQ CIBLÉS (Niveau: ${answers.level}):\n${answers.concepts.map(c => `   - ${c}`).join('\n')}`;
+                    concepts = `3. CONCEPTS PFEQ:\n${answers.concepts.map(c => `- ${c}`).join('\n')}`;
+                    source = `SOURCE: Création originale.`;
                 }
 
-                let contentSection = "";
-                if (isDoc) {
-                    contentSection = `4. CONTENU SOURCE (DOCUMENT): 
-   ---------------------------------------------------
-   ${answers.content}
-   ---------------------------------------------------
-   Utilise UNIQUEMENT ce contenu pour générer les questions.`;
-                } else {
-                    contentSection = `4. SOURCE: Création originale basée strictement sur les concepts PFEQ sélectionnés.`;
+                const prompt = `RÔLE: Créer une activité interactive. Expert PFEQ Maths, Dév Web senior, Designer QA.
+BUT: Créer une activité math. (HTML/JS/CSS unique) gamifiée, robuste et mathématiquement parfaite.
+
+[PARAMÈTRES]
+1. PROJET: ${isDoc ? "Adaptation doc" : "Nouvelle création"} | 2. NIVEAU: ${answers.level}
+${concepts}
+${source}
+4. FORMAT: ${actStr} | ${answers.questionCount} | Diff: ${answers.difficulty}
+5. UX: Rétroaction immédiate, Recommencer, Score, Indices${fbx}
+6. STYLE/THÈME: ${answers.style} / ${answers.theme || "Libre"}
+7. TECH: ${answers.techFormat} | UI: ${answers.interfaceStyle}
+
+🛑 CONTRAINTES ABSOLUES (ZÉRO TOLÉRANCE) :
+
+1. RIGUEUR MATHÉMATIQUE INFAILLIBLE :
+- 0 erreur. Validations et calculs 100% exacts.
+- Équivalences requises : Prévois/accepte TOUTES les représentations valides (ex. 247 = 2c 4d 7u OU 24d 7u OU 2c 47u). L'IA doit être mathématiquement intelligente.
+- Graphiques exhaustifs : TOUT plan cartésien, diagramme ou géométrie DOIT être 100% complet (titres, axes identifiés, graduations claires, données le long des axes, légendes, échelles exactes). Les arcs de cercles doivent être parfaitement positionnés lorsque des angles apparaissent.
+
+2. VISUEL & INTERFACE IMPECCABLES :
+- Rendu Premium (type jeu Netmath), alignements stricts, couleurs harmonieuses (${answers.theme || "Libre"}).
+- Visuels générés : Utilise SVG/CSS pour tout support utile (fractions, figures, tableaux). Pas de math purement textuelle si le visuel aide.
+- 0 bug visuel : aucun chevauchement, lisibilité parfaite sur tout écran.
+
+3. ROBUSTESSE ET CODE (QA) :
+- Mécanique (${actStr}) 100% fonctionnelle (Drag&Drop, minuteur, etc.).
+- Code anti-crash : gère les champs vides et les doubles-clics. Ne plante jamais.
+- 1 FICHIER UNIQUE (HTML+JS+CSS). Pas de alert() (utilise le DOM). Produit fini, jouable immédiatement.`;
+
+                // Hard limit fallback just in case
+                if(prompt.length > 4000) {
+                    return prompt.substring(0, 3995) + "...";
                 }
-
-                return `RÔLE: Tu es un expert en pédagogie mathématique (Primaire Québec PFEQ), développeur web d'élite et designer UX/UI spécialisé en gamification.
-
-OBJECTIF: Créer une activité mathématique interactive autonome d'une qualité visuelle et pédagogique exceptionnelle.
-
-1. TYPE DE PROJET: ${isDoc ? "Adaptation numérique d'un document existant" : "Nouvelle création (Basée sur le PFEQ)"}
-2. PUBLIC CIBLE: ${answers.level}
-3. ${conceptsSection}
-
-${contentSection}
-
-5. TYPE D'ACTIVITÉ: ${activityTypeStr}
-6. VOLUME: ${answers.questionCount} questions.
-7. DIFFICULTÉ: ${answers.difficulty}
-8. SYSTÈME DE RÉTROACTION (OBLIGATOIRE):
-   - Validation immédiate (Vert/Rouge)
-   - Bouton Recommencer
-   - Score final et Résumé
-   - Indices et Explications
-   ${feedbackExtras ? `- AJOUTS: ${feedbackExtras}` : ""}
-9. STYLE PÉDAGOGIQUE: ${answers.style}
-10. THÈME / UNIVERS: ${answers.theme ? answers.theme : "Au choix de l'IA (Créatif)"}
-11. INTERFACE: ${answers.interfaceStyle}
-12. TECHNIQUE: ${answers.techFormat}
-
-CONTRAINTES DE QUALITÉ VISUELLE ET D'EXPÉRIENCE UTILISATEUR (MÉTA-CONSIGNE IMPÉRATIVE) :
-- L'activité générée doit être VISUELLEMENT IMPECCABLE, structurée et digne d'une application professionnelle (type Netmath ou jeu vidéo éducatif).
-- Le design doit être soigné, aéré et fluide : alignements parfaits, palette de couleurs harmonieuse, typographie lisible et hiérarchisée.
-- Les éléments visuels ne doivent JAMAIS être difformes, flous ou mal proportionnés. Tout doit être net et esthétique.
-- L'expérience utilisateur (UX) doit être fluide et intuitive : scénario bien ficelé, transitions douces, feedbacks visuels gratifiants.
-- L'élève doit se sentir immergé dans un environnement cohérent et logique (Thème: ${answers.theme || "Libre"}), sans friction technique ou visuelle.
-
-CONTRAINTES VISUELLES (MÉTA-CONSIGNE IMPÉRATIVE) :
-- Si la question nécessite un support visuel pour être comprise (géométrie, fractions, dénombrement, statistiques), tu DOIS impérativement générer ces éléments visuels.
-- Utilise des images générées via SVG, Canvas ou CSS shapes pour représenter : polygones, solides, diagrammes, ensembles d'objets, tartes/bandes de fractions, droites numériques, etc.
-- Toutes les représentations nécessaires à la compréhension des questions doivent être présentes visuellement (pas seulement décrites textuellement).
-
-CONTRAINTES DE MÉCANIQUE INTERACTIVE (MÉTA-CONSIGNE IMPÉRATIVE) :
-Tu dois IMPÉRATIVEMENT respecter le ou les types d'activités sélectionnés ci-dessus (Point 5).
-- Si "Glisser-déposer" est choisi : Le code DOIT inclure une mécanique de drag & drop fonctionnelle (HTML5 Drag and Drop API ou événements souris/touch).
-- Si "Associer des éléments" est choisi : L'activité DOIT demander de relier des éléments (lignes tracées ou paires identifiées).
-- Si "Défi chronométré" est choisi : Un minuteur (Timer) DOIT être visible et fonctionnel, arrêtant l'activité ou donnant un bonus.
-- Si "Parcours gamifié" est choisi : L'activité doit présenter une progression visuelle (carte, niveaux, barre d'XP).
-- Si "QCM interactif" est choisi : Des boutons radio ou boutons cliquables classiques.
-- Si "Réponse courte" est choisi : Des champs input text/number avec validation stricte.
-Le non-respect de la mécanique choisie rend l'activité invalide.
-
-CONTRAINTES DE ROBUSTESSE ET DE PROFESSIONNALISME (MÉTA-CONSIGNE IMPÉRATIVE) :
-- Le code doit être EXEMPT DE BUGS. Tu dois vérifier mentalement chaque fonction logique.
-- Aucune anomalie visuelle ou comportementale n'est tolérée (superposition d'éléments, boutons qui ne réagissent pas, scores qui ne s'incrémentent pas).
-- La logique mathématique doit être INFAILLIBLE (pas d'erreurs de calcul ou de validation de réponse incorrecte).
-- Prévois la gestion des erreurs : que se passe-t-il si l'élève clique deux fois ? S'il ne remplit pas le champ ? Le jeu ne doit jamais "crasher".
-- Le résultat final doit être testable immédiatement et fonctionner parfaitement du premier coup, comme un produit fini professionnel.
-
-INSTRUCTIONS TECHNIQUES:
-- Génère UN SEUL fichier HTML complet (HTML/CSS/JS).
-- Le code produit sera utilisé dans une page HTML (ou Google Sites).
-- Code robuste, sans erreur, responsive.
-- Pas de 'alert()', utilise des messages dans le DOM.
-- Assure une parfaite cohérence didactique.
-
-Génère maintenant le code.`;
+                return prompt;
             };
+
+            useEffect(() => {
+                if(step === RESULT_STEP) {
+                    const len = generatePrompt().length;
+                    setPromptLengthWarning(len > 3900);
+                }
+            }, [step, answers]);
 
             const copyToClipboard = () => {
                 if (outputRef.current) {
@@ -429,7 +395,7 @@ Génère maintenant le code.`;
                                 <div className="space-y-4 animate-fadeIn">
                                     <h3 className="text-xl font-semibold mb-2 text-indigo-900">3. Contenu du Document</h3>
                                     <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-4 text-amber-800 text-sm">
-                                        <strong>Meta-consigne active :</strong> L'activité n'utilisera QUE les concepts du texte ci-dessous.
+                                        <strong>Meta-consigne active :</strong> L'activité n'utilisera QUE les concepts du texte ci-dessous. Le texte long sera tronqué pour respecter la limite de 4000 caractères du prompt final.
                                     </div>
                                     <textarea className="w-full p-4 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none h-64 font-mono text-sm" placeholder="Collez votre exercice ici..." value={answers.content} onChange={(e) => setAnswers({...answers, content: e.target.value})}></textarea>
                                 </div>
@@ -530,7 +496,7 @@ Génère maintenant le code.`;
                                 </div>
                             </div>
                         );
-                    case 9: // --- NEW STEP: THEMES ---
+                    case 9:
                         return (
                             <div className="space-y-4 animate-fadeIn">
                                 <h3 className="text-xl font-semibold mb-2 text-indigo-900">9. Univers & Thème</h3>
@@ -583,14 +549,17 @@ Génère maintenant le code.`;
                             <div className="space-y-6 animate-fadeIn">
                                 <div className="text-center">
                                     <div className="bg-green-100 p-3 rounded-full w-16 h-16 mx-auto flex items-center justify-center mb-4 text-green-600"><Icons.Check className="w-8 h-8" /></div>
-                                    <h2 className="text-2xl font-bold text-gray-800">Prompt Généré</h2>
-                                    <p className="text-gray-600 mb-4">Voici la commande à copier et à donner à l'IA.</p>
+                                    <h2 className="text-2xl font-bold text-gray-800">Prompt Généré & Optimisé</h2>
+                                    <p className="text-gray-600 mb-2">Les consignes sont compressées, strictes et limitées à 4000 caractères max.</p>
+                                    <div className={`text-xs font-mono inline-block px-3 py-1 rounded-full ${generatePrompt().length > 3900 ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+                                        {generatePrompt().length} / 4000 caractères
+                                    </div>
                                 </div>
                                 <div className="relative mb-4">
                                     <textarea 
                                         ref={outputRef}
                                         id="prompt-output"
-                                        className="w-full p-4 h-80 border-2 border-indigo-200 rounded-xl font-mono text-xs bg-gray-50 text-gray-800 focus:border-indigo-500 outline-none" 
+                                        className="w-full p-4 h-80 border-2 border-indigo-200 rounded-xl font-mono text-sm bg-gray-50 text-gray-800 focus:border-indigo-500 outline-none" 
                                         value={generatePrompt()} 
                                         readOnly
                                     ></textarea>
@@ -621,12 +590,10 @@ Génère maintenant le code.`;
                             <div className="w-6 h-6"><Icons.Calculator /></div>
                             <h1 className="text-lg font-bold">Assistant PFEQ</h1>
                         </div>
-                        {/* Barre de progression : on ne l'affiche pas à l'écran de résultat (étape 12) */}
                         {step > 0 && step < RESULT_STEP && (
                             <div className="text-xs font-medium bg-indigo-800 px-3 py-1 rounded-full border border-indigo-600">Étape {step}/{LAST_QUESTION_STEP}</div>
                         )}
                     </div>
-                    {/* Barre de progression visuelle */}
                     {step > 0 && step < RESULT_STEP && (
                         <div className="w-full bg-gray-200 h-1.5">
                             <div className="bg-indigo-500 h-1.5 transition-all duration-300 ease-out" style={{ width: `${(step / LAST_QUESTION_STEP) * 100}%` }}></div>
@@ -635,7 +602,6 @@ Génère maintenant le code.`;
                     <div className="p-6 md:p-8">
                         {renderStepContent()}
                         
-                        {/* Boutons de navigation (Retour / Suivant) - cachés sur l'écran final */}
                         {step > 0 && step < RESULT_STEP && (
                             <div className="flex justify-between mt-8 pt-6 border-t border-gray-100">
                                 <button onClick={prevStep} className="px-5 py-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition flex items-center gap-2 text-sm font-medium">
